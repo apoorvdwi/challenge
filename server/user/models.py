@@ -6,28 +6,31 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings
 import base64, requests, subprocess
+import re
+from django.core.exceptions import ValidationError
 
+def validate_ethereum_address(value):
+    if not re.match(r"^0x[a-fA-F0-9]{40}$", value):
+        raise ValidationError(f"{value} is not a valid Ethereum address")
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **kwargs):
-
         if not email:
             raise ValueError("Email is required")
 
         user = self.model(
-            email=self.normalize_email(email)
+            email=self.normalize_email(email),
+            **kwargs
         )
 
         user.set_password(password)
         user.save(using=self._db)
-
         return user
-
 
     def create_superuser(self, email, password, **kwargs):
         user = self.create_user(
             email=self.normalize_email(email),
-            password=password
+            password=password,
         )
 
         user.first_name = kwargs.get('first_name')
@@ -38,11 +41,11 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return
 
-
 class User(AbstractBaseUser):
     email = models.EmailField(null=False, blank=False, unique=True)
     first_name = models.CharField(max_length=50, blank=False, null=False, default='Default first name')
     last_name = models.CharField(max_length=50, blank=False, null=False, default='Default last name')
+    ethereum_wallet = models.CharField(max_length=42, blank=True, null=True, validators=[validate_ethereum_address])
     is_admin = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
@@ -53,7 +56,7 @@ class User(AbstractBaseUser):
     objects = UserManager()
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['first_name', 'last_name']
+    REQUIRED_FIELDS = ['first_name', 'last_name', 'ethereum_wallet']
 
     def __str__(self):
         return self.email
